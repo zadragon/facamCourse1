@@ -1,8 +1,9 @@
 import AuthContext from "context/AuthContext";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 import { db } from "firebaseApp";
 import { useContext, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
 interface PostListProps {
   hasNavigation?: boolean;
@@ -10,27 +11,39 @@ interface PostListProps {
 
 type TabType = "all" | "my";
 
-interface PostProps {
-  id: string;
+export interface PostProps {
+  id?: string;
   title: string;
   email: string;
   summary: string;
   content: string;
   createAt: string;
+  updatedAt: string;
+  uid: string;
 }
 
 export default function PostList({ hasNavigation = true }: PostListProps) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [posts, setPosts] = useState<PostProps[]>([]);
   const { user } = useContext(AuthContext);
 
   const getPosts = async () => {
     const datas = await getDocs(collection(db, "posts"));
-
+    setPosts([]);
     datas.forEach((doc) => {
       const dataObj = { ...doc.data(), id: doc.id };
       setPosts((prev) => [...prev, dataObj as PostProps]);
     });
+  };
+
+  const handleDelete = async (id: string) => {
+    const confirm = window.confirm("해당 게시글을 삭제하시겠습니까?");
+    if (confirm && id) {
+      await deleteDoc(doc(db, "posts", id));
+      toast.success("게시글을 삭제했습니다.");
+      getPosts(); //변경된 포스트리스트 가져오도록
+    }
   };
 
   useEffect(() => {
@@ -61,18 +74,24 @@ export default function PostList({ hasNavigation = true }: PostListProps) {
         {posts?.length > 0 ? (
           posts.map((post, index) => (
             <div key={post?.id} className="post__box">
-              <Link to={`/posts/${index}`}>
+              <Link to={`/posts/${post?.id}`}>
                 <div className="post__profile-box">
                   <div className="post__profile" />
                   <div className="post__author-name">{post.email}</div>
                   <div className="post__date">{post.createAt}</div>
                 </div>
                 <div className="post__title">{post.title}</div>
-                <div className="post__text">{post.content}</div>
+                <div className="post__text">{post.summary}</div>
               </Link>
               {post?.email === user?.email && (
                 <div className="post__utils-box">
-                  <div className="post__delete">삭제</div>
+                  <div
+                    className="post__delete"
+                    role="presentaion"
+                    onClick={() => handleDelete(post.id as string)}
+                  >
+                    삭제
+                  </div>
                   <Link to={`/posts/edit/${post?.id}`} className="post__edit">
                     수정
                   </Link>
