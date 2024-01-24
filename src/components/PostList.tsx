@@ -1,5 +1,13 @@
 import AuthContext from "context/AuthContext";
-import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
 import { db } from "firebaseApp";
 import { useContext, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -7,6 +15,7 @@ import { toast } from "react-toastify";
 
 interface PostListProps {
   hasNavigation?: boolean;
+  defaultTab?: TabType | CategoryType;
 }
 
 type TabType = "all" | "my";
@@ -17,21 +26,57 @@ export interface PostProps {
   email: string;
   summary: string;
   content: string;
-  createAt: string;
+  createdAt: string;
   updatedAt: string;
   uid: string;
+  category?: CategoryType;
 }
 
-export default function PostList({ hasNavigation = true }: PostListProps) {
+export type CategoryType = "Frontend" | "Backend" | "Web" | "Native";
+export const CATEGORIES: CategoryType[] = [
+  "Frontend",
+  "Backend",
+  "Web",
+  "Native",
+];
+
+export default function PostList({
+  hasNavigation = true,
+  defaultTab = "all",
+}: PostListProps) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [activeTab, setActiveTab] = useState<TabType | CategoryType>(
+    defaultTab
+  );
   const [posts, setPosts] = useState<PostProps[]>([]);
   const { user } = useContext(AuthContext);
 
   const getPosts = async () => {
-    const datas = await getDocs(collection(db, "posts"));
+    // posts 초기화
     setPosts([]);
-    datas.forEach((doc) => {
+    let postsRef = collection(db, "posts");
+    let postsQuery;
+
+    if (activeTab === "my" && user) {
+      // 나의 글만 필터링
+      postsQuery = query(
+        postsRef,
+        where("uid", "==", user.uid),
+        orderBy("createdAt", "desc")
+      );
+    } else if (activeTab === "all") {
+      // 모든 글 보여주기
+      postsQuery = query(postsRef, orderBy("createdAt", "desc"));
+    } else {
+      // 카테고리 글 보여주기
+      postsQuery = query(
+        postsRef,
+        where("category", "==", activeTab),
+        orderBy("createdAt", "desc")
+      );
+    }
+    const datas = await getDocs(postsQuery);
+    datas?.forEach((doc) => {
       const dataObj = { ...doc.data(), id: doc.id };
       setPosts((prev) => [...prev, dataObj as PostProps]);
     });
@@ -48,7 +93,7 @@ export default function PostList({ hasNavigation = true }: PostListProps) {
 
   useEffect(() => {
     getPosts();
-  }, []);
+  }, [activeTab]);
 
   return (
     <>
@@ -68,6 +113,16 @@ export default function PostList({ hasNavigation = true }: PostListProps) {
           >
             나의 글
           </div>
+          {CATEGORIES?.map((category) => (
+            <div
+              key={category}
+              role="presentation"
+              onClick={() => setActiveTab(category)}
+              className={activeTab === "my" ? "post__navigation--active" : ""}
+            >
+              {category}
+            </div>
+          ))}
         </div>
       )}
       <div className="post__list">
@@ -78,7 +133,7 @@ export default function PostList({ hasNavigation = true }: PostListProps) {
                 <div className="post__profile-box">
                   <div className="post__profile" />
                   <div className="post__author-name">{post.email}</div>
-                  <div className="post__date">{post.createAt}</div>
+                  <div className="post__date">{post.createdAt}</div>
                 </div>
                 <div className="post__title">{post.title}</div>
                 <div className="post__text">{post.summary}</div>
